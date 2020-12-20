@@ -8,7 +8,7 @@ object Ast {
 
   trait SqlExpr extends Node
 
-  trait SqlProjection extends SqlExpr
+  trait ProjectExpr extends SqlExpr
 
   trait BinaryOp extends SqlExpr {
     val left: SqlExpr
@@ -33,9 +33,9 @@ object Ast {
 
   case class And(left: SqlExpr, right: SqlExpr) extends SqlExpr
 
-  case class Literal(value: Value[_]) extends SqlExpr with SqlProjection
+  case class Literal(value: Value[_]) extends SqlExpr with ProjectExpr
 
-  case class FieldIdent(qualify: Option[String], name: String) extends SqlExpr with SqlProjection {
+  case class Field(qualify: Option[String], name: String) extends SqlExpr with ProjectExpr {
 
     val key: String = qualify match {
       case None => name
@@ -45,25 +45,25 @@ object Ast {
     override def toString: String = key
   }
 
-  case class StarProj() extends SqlProjection
+  case class StarProj() extends ProjectExpr
 
   trait SqlAgg extends SqlExpr
 
-  case class CountStar() extends SqlProjection with SqlAgg
+  case class CountStar() extends ProjectExpr with SqlAgg
 
-  case class CountExpr(expr: SqlProjection, distinct: Boolean) extends SqlProjection with SqlAgg
+  case class CountExpr(expr: ProjectExpr, distinct: Boolean) extends ProjectExpr with SqlAgg
 
-  case class Sum(expr: SqlProjection, distinct: Boolean) extends SqlProjection with SqlAgg
+  case class Sum(expr: ProjectExpr, distinct: Boolean) extends ProjectExpr with SqlAgg
 
-  case class Avg(expr: SqlProjection, distinct: Boolean) extends SqlProjection with SqlAgg
+  case class Avg(expr: ProjectExpr, distinct: Boolean) extends ProjectExpr with SqlAgg
 
-  case class Min(expr: SqlProjection) extends SqlProjection with SqlAgg
+  case class Min(expr: ProjectExpr) extends ProjectExpr with SqlAgg
 
-  case class Max(expr: SqlProjection) extends SqlProjection with SqlAgg
+  case class Max(expr: ProjectExpr) extends ProjectExpr with SqlAgg
 
-  case class GroupBy(keys: Seq[SqlProjection]) extends Node
+  case class GroupBy(keys: Seq[ProjectExpr]) extends Node
 
-  case class OrderBy(keys: Seq[SqlProjection]) extends Node
+  case class OrderBy(keys: Seq[ProjectExpr]) extends Node
 
   trait Relation extends Node
 
@@ -73,13 +73,13 @@ object Ast {
 
   case class JoinRelation(table: TableRelation, condition: Option[SqlExpr])
 
-  case class Projection(sqlProj: SqlProjection, alias: Option[String]) extends Node
+  case class Projection(expr: ProjectExpr, alias: Option[String]) extends Node
 
   case class SelectStmt(projections: Seq[Projection],
                         relations: Relation,
                         where: Option[SqlExpr],
                         groupBy: Option[GroupBy],
                         orderBy: Option[OrderBy],
-                        limit: Option[(Option[Int], Int)]) extends Node
+                        limit: Option[(Option[Int], Int)]) extends Relation
 
 }

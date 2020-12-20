@@ -2,7 +2,7 @@ package rain.engine
 
 import org.junit.Test
 import rainm.engine.Engine
-import rainm.engine.Value.{DataBase, Row, Table}
+import rainm.engine.Value._
 
 class TestEngine {
 
@@ -53,7 +53,7 @@ class TestEngine {
     var result = query(table, "select b, a from table")
     print(result)
 
-    result = query(table, "select table.b, a from table where c < 5")
+    result = query(table, "select b, a from table where c < 5")
     print(result)
 
     result = query(table, "select u.b, u.a from table as u where u.c < 5")
@@ -66,13 +66,10 @@ class TestEngine {
   @Test
   def joinTest(): Unit = {
 
-    val users = tableUser()
-    val posts = tablePost()
-    val comments = tableComment()
     val db: DataBase = Map(
-      "user" -> users,
-      "post" -> posts,
-      "comment" -> comments
+      "user" -> tableUser(),
+      "post" -> tablePost(),
+      "comment" -> tableComment()
     )
 
     var result = Engine.query(db, "select * from user")
@@ -94,6 +91,18 @@ class TestEngine {
         "join post as p on u.id = p.user_id " +
         "join comment as c on c.post_id = p.id " +
         "where u.id <= 3")
+    print(result)
+  }
+
+  @Test
+  def selectOnSelectTest(): Unit = {
+    val db: DataBase = Map(
+      "user" -> tableUser(),
+      "post" -> tablePost(),
+      "comment" -> tableComment()
+    )
+    val result = Engine.query(db,
+    "select * from (select * from user where id <= 3)")
     print(result)
   }
 

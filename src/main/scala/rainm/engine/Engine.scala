@@ -31,29 +31,30 @@ object Engine {
   implicit class DataBaseOp(db: DataBase) {
     def from(relation: Relation): Table = relation match {
       case rel: TableRelation =>
-        genTable(rel)
+        selectAll(rel)
       case TableWithJoin(table, joins) =>
-        joinWith(genTable(table), joins)
+        joinWith(selectAll(table), joins)
+      case sql: SelectStmt =>
+        execute(db, sql)
     }
 
-    def applyAlias(table: Table, alias: String, keepOriginal: Boolean): Table =
-      table.map(row => applyAlias(row, alias, keepOriginal))
+    def applyAlias(table: Table, alias: String): Table =
+      table.map(row => applyAlias(row, alias))
 
-    def applyAlias(row: Row, alias: String, keepOriginal: Boolean): Row = {
-      val aliased: Row = row.collect({ case (_1, _2) => (alias + "." + _1, _2) }).toMap
-      if (keepOriginal) row ++ aliased
-      else aliased
+    def applyAlias(row: Row, alias: String): Row = {
+      row.collect({ case (_1, _2) => (alias + "." + _1, _2) }).toMap
     }
 
     def joinWith(table: Table, joins: Seq[JoinRelation]): Table = {
       joins match {
         case Nil => table
-        case join :: tails => joinWith(joinWithSingle(table, join), tails)
+        case join :: tails =>
+          joinWith(joinWithSingle(table, join), tails)
       }
     }
 
     def joinWithSingle(table: Table, join: JoinRelation): Table = {
-      val right = genTable(join.table)
+      val right = selectAll(join.table)
       val joined = table.flatMap(row => right.map(rightRow => row ++ rightRow))
       join.condition match {
         case Some(expr) =>
@@ -63,9 +64,9 @@ object Engine {
       }
     }
 
-    def genTable(rel: TableRelation): Table = (rel.name, rel.alias) match {
-      case (name, None) => applyAlias(db(name), name, keepOriginal = true)
-      case (name, Some(alias)) => applyAlias(db(name), alias, keepOriginal = false)
+    def selectAll(rel: TableRelation): Table = (rel.name, rel.alias) match {
+      case (name, None) => db(name)
+      case (name, Some(alias)) => applyAlias(db(name), alias)
     }
   }
 
@@ -101,7 +102,7 @@ object Engine {
 
   implicit class GroupedTable(tables: Seq[Table]) {
 
-    def isAgg(projection: Projection): Boolean = projection.sqlProj match {
+    def isAgg(projection: Projection): Boolean = projection.expr match {
       case _: SqlAgg => true
       case _ => false
     }
@@ -127,7 +128,7 @@ object Engine {
           case Some(alias: String) =>
             Map[String, Value[_]](alias -> evalAggFunction(input, e).values.head)
         }
-        case e: FieldIdent =>
+        case e: Field =>
           input.head.collect({
             case (e.key, _2) => (e.key, _2)
           })
@@ -146,11 +147,11 @@ object Engine {
   }
 
   def projector(proj: Projection): PartialFunction[(String, Value[_]), (String, Value[_])] =
-    (proj.sqlProj, proj.alias) match {
+    (proj.expr, proj.alias) match {
       case (StarProj(), _) => {
         case (_1, _2) => (_1, _2)
       }
-      case (f: FieldIdent, alias) =>
+      case (f: Field, alias) =>
         alias match {
           case None => {
             case (f.key, _2) => (f.key, _2)
@@ -178,9 +179,9 @@ object Engine {
     def evalBinaryOp(r: Row, expr: BinaryOp, f: (Value[_], Value[_]) => Boolean): Boolean = {
       (expr.left, expr.right) match {
         case (left: Literal, right: Literal) => f(left.value, right.value)
-        case (left: Literal, right: FieldIdent) => f(left.value, right.of(r))
-        case (left: FieldIdent, right: Literal) => f(left.of(r), right.value)
-        case (left: FieldIdent, right: FieldIdent) => f(left.of(r), right.of(r))
+        case (left: Literal, right: Field) => f(left.value, right.of(r))
+        case (left: Field, right: Literal) => f(left.of(r), right.value)
+        case (left: Field, right: Field) => f(left.of(r), right.of(r))
       }
     }
 
@@ -211,7 +212,7 @@ object Engine {
   def evalAggFunction(input: Table, func: SqlAgg): Row = {
     func match {
       case CountStar() => Map("count(*)" -> input.size)
-      case CountExpr(e: FieldIdent, distinct: Boolean) =>
+      case CountExpr(e: Field, distinct: Boolean) =>
         if (distinct) {
           val count = input.map(row => e.of(row)).distinct.size
           Map("count(distinct " + e + ")" -> count)
@@ -221,13 +222,13 @@ object Engine {
       case CountExpr(e: Literal, distinct: Boolean) =>
         if (distinct) Map("count(distinct " + e.value + ")" -> 1)
         else Map("count(" + e.value + ")" -> input.size)
-      case Max(e: FieldIdent) =>
+      case Max(e: Field) =>
         Map("max(" + e + ")" -> input.maxBy(row => e.of(row)).head._2)
-      case Min(e: FieldIdent) =>
+      case Min(e: Field) =>
         Map("min(" + e + ")" -> input.minBy(row => e.of(row)).head._2)
       case Max(e: Literal) => Map("max(" + e.value + ")" -> e.value)
       case Min(e: Literal) => Map("min(" + e.value + ")" -> e.value)
-      case Sum(e: FieldIdent, distinct: Boolean) =>
+      case Sum(e: Field, distinct: Boolean) =>
         if (distinct) {
           val sum = input.map(row => e.of(row)).distinct.sum
           Map("sum(distinct " + e + ")" -> sum)
@@ -242,9 +243,10 @@ object Engine {
           e.value match {
             case e: IntValue => Map("sum(" + e.value + ")" -> e.value * input.size)
             case e: DoubleValue => Map("sum(" + e.value + ")" -> e.value * input.size)
+            case _ => throw new RuntimeException("Cannot perform sum()")
           }
         }
-      case Avg(e: FieldIdent, distinct: Boolean) =>
+      case Avg(e: Field, distinct: Boolean) =>
         val sum =
           if (distinct) input.map(row => e.of(row)).distinct.sum
           else input.map(row => e.of(row)).sum
@@ -281,7 +283,7 @@ object Engine {
       case Left(g) => g.keys
       case Right(o) => o.keys
     }
-    keys.map({ case x: FieldIdent => x.key })
+    keys.map({ case x: Field => x.key })
   }
 
   trait FieldGetter {
@@ -292,7 +294,7 @@ object Engine {
     def of(row: Row): Value[_] = row(key)
   }
 
-  implicit class FieldIdentGetter(ident: FieldIdent) extends FieldGetter {
+  implicit class FieldIdentGetter(ident: Field) extends FieldGetter {
     def of(row: Row): Value[_] =
       if (row.contains(ident.key)) row(ident.key)
       else row(ident.name)

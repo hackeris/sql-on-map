@@ -61,19 +61,19 @@ object Parser extends StandardTokenParsers {
   def floatLit: Parser[String] =
     elem("decimal", x => x.isInstanceOf[lexical.FloatLit]) ^^ (_.chars)
 
-  def literal: Parser[SqlProjection] = {
+  def literal: Parser[ProjectExpr] = {
     numericLit ^^ (i => Literal(i.toInt)) |
       stringLit ^^ (s => Literal(s)) |
       floatLit ^^ (f => Literal(f.toDouble)) |
       "null" ^^ (_ => Literal(null))
   }
 
-  def fieldIdentity: Parser[FieldIdent] =
+  def fieldIdentity: Parser[Field] =
     ident ~ opt("." ~> ident) ^^ {
       case table ~ Some(field) =>
-        FieldIdent(Option(table), field)
+        Field(Option(table), field)
       case column ~ None =>
-        FieldIdent(None, column)
+        Field(None, column)
     }
 
   def binaryOp: Parser[String] = "=" | "<>" | "!=" | "<" | "<=" | ">" | ">="
@@ -107,23 +107,23 @@ object Parser extends StandardTokenParsers {
         case expr ~ alias => Projection(expr, alias)
       }
 
-  def selectLiteral: Parser[SqlProjection] = literal
+  def selectLiteral: Parser[ProjectExpr] = literal
 
-  def selectIdent: Parser[SqlProjection] =
+  def selectIdent: Parser[ProjectExpr] =
     ident ~ opt("." ~> ident) ^^ {
       case table ~ Some(b: String) =>
-        FieldIdent(Option(table), b)
+        Field(Option(table), b)
       case column ~ None =>
-        FieldIdent(None, column)
+        Field(None, column)
     }
 
-  def singleSelectExpr: Parser[SqlProjection] =
+  def singleSelectExpr: Parser[ProjectExpr] =
     selectLiteral | selectIdent
 
-  def primarySelectExpr: Parser[SqlProjection] =
+  def primarySelectExpr: Parser[ProjectExpr] =
     singleSelectExpr | knowFunction
 
-  def knowFunction: Parser[SqlProjection] = {
+  def knowFunction: Parser[ProjectExpr] = {
     "count" ~> "(" ~> projInCount <~ ")" |
       "min" ~> "(" ~> singleSelectExpr <~ ")" ^^ (p => Min(p)) |
       "max" ~> "(" ~> singleSelectExpr <~ ")" ^^ (p => Max(p)) |
@@ -131,16 +131,19 @@ object Parser extends StandardTokenParsers {
       "avg" ~> "(" ~> (opt("distinct") ~ singleSelectExpr) <~ ")" ^^ { case d ~ e => Avg(e, d.isDefined) }
   }
 
-  def projInCount: Parser[SqlProjection] =
+  def projInCount: Parser[ProjectExpr] =
     "*" ^^ (_ => CountStar()) |
       opt("distinct") ~ singleSelectExpr ^^ {
         case d ~ e => CountExpr(e, d.isDefined)
       }
 
   def fromStatements: Parser[Relation] =
-    "from" ~ relation ~ rep(joinRelation) ^^ {
-      case _ ~ relation ~ Nil => relation
-      case _ ~ relation ~ joins => TableWithJoin(relation, joins)
+    "from" ~> (tableRelation | "(" ~> select <~ ")")
+
+  def tableRelation: Parser[Relation] =
+    relation ~ rep(joinRelation) ^^ {
+      case relation ~ Nil => relation
+      case relation ~ joins => TableWithJoin(relation, joins)
     }
 
   def relation: Parser[TableRelation] =
