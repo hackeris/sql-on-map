@@ -1,4 +1,4 @@
-#sql-on-map
+# sql-on-map
 
 execute sql on maps as rows
 
