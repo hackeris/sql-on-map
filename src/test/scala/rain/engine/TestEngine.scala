@@ -15,7 +15,7 @@ class TestEngine {
     Seq(row1, row2, row3, row4, row5)
   }
 
-  def tableUser(): Table = {
+  def userTable(): Table = {
     val row1: Row = Map("id" -> 1, "name" -> "Jack1", "c" -> 2)
     val row2: Row = Map("id" -> 2, "name" -> "Jack2", "c" -> 4)
     val row3: Row = Map("id" -> 3, "name" -> "Jack3", "c" -> 6)
@@ -24,7 +24,7 @@ class TestEngine {
     Seq(row1, row2, row3, row4, row5)
   }
 
-  def tablePost(): Table = {
+  def postTable(): Table = {
     val row1: Row = Map("id" -> 1, "user_id" -> 1, "title" -> "of 1")
     val row2: Row = Map("id" -> 2, "user_id" -> 2, "title" -> "of 2")
     val row3: Row = Map("id" -> 3, "user_id" -> 3, "title" -> "of 3")
@@ -33,12 +33,18 @@ class TestEngine {
     Seq(row1, row2, row3, row4, row5)
   }
 
-  def tableComment(): Table = {
+  def commentTable(): Table = {
     val row1: Row = Map("id" -> 1, "post_id" -> 1, "content" -> "comment 1")
     val row2: Row = Map("id" -> 2, "post_id" -> 2, "content" -> "comment 2")
     val row3: Row = Map("id" -> 3, "post_id" -> 2, "content" -> "comment 3 2")
     Seq(row1, row2, row3)
   }
+
+  def getDb: DataBase = Map(
+    "user" -> userTable(),
+    "post" -> postTable(),
+    "comment" -> commentTable()
+  )
 
   @Test
   def singleTableTest(): Unit = {
@@ -66,11 +72,7 @@ class TestEngine {
   @Test
   def joinTest(): Unit = {
 
-    val db: DataBase = Map(
-      "user" -> tableUser(),
-      "post" -> tablePost(),
-      "comment" -> tableComment()
-    )
+    val db: DataBase = getDb
 
     var result = query(db, "select * from user")
     print(result)
@@ -96,13 +98,10 @@ class TestEngine {
 
   @Test
   def selectOnSelectTest(): Unit = {
-    val db: DataBase = Map(
-      "user" -> tableUser(),
-      "post" -> tablePost(),
-      "comment" -> tableComment()
-    )
-    val result = query(db,
-    "select * from (select * from user where id <= 3)")
+
+    val db: DataBase = getDb
+
+    val result = query(db, "select * from (select * from user where id <= 3)")
     print(result)
   }
 
