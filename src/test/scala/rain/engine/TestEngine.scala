@@ -1,7 +1,7 @@
 package rain.engine
 
 import org.junit.Test
-import rainm.engine.Engine
+import rainm.engine.Engine.query
 import rainm.engine.Value._
 
 class TestEngine {
@@ -45,21 +45,21 @@ class TestEngine {
 
     val table = table1()
 
-    def query(table: Table, sql: String): Table = {
+    def exec(table: Table, sql: String): Table = {
       val db: DataBase = Map("table" -> table)
-      Engine.query(db, sql)
+      query(db, sql)
     }
 
-    var result = query(table, "select b, a from table")
+    var result = exec(table, "select b, a from table")
     print(result)
 
-    result = query(table, "select b, a from table where c < 5")
+    result = exec(table, "select b, a from table where c < 5")
     print(result)
 
-    result = query(table, "select u.b, u.a from table as u where u.c < 5")
+    result = exec(table, "select u.b, u.a from table as u where u.c < 5")
     print(result)
 
-    result = query(table, "select max(b), min(a) from table")
+    result = exec(table, "select max(b), min(a) from table")
     print(result)
   }
 
@@ -72,20 +72,20 @@ class TestEngine {
       "comment" -> tableComment()
     )
 
-    var result = Engine.query(db, "select * from user")
+    var result = query(db, "select * from user")
     print(result)
 
-    result = Engine.query(db, "select u.id, u.name, p.title " +
+    result = query(db, "select u.id, u.name, p.title " +
       "from user as u join post as p on u.id = p.user_id")
     print(result)
 
-    result = Engine.query(db,
+    result = query(db,
       "select u.id, u.name, p.title " +
         "from user as u join post as p on u.id = p.user_id " +
         "where u.id <= 3")
     print(result)
 
-    result = Engine.query(db,
+    result = query(db,
       "select u.id, p.id, c.id, u.name, p.title, c.content " +
         "from user as u " +
         "join post as p on u.id = p.user_id " +
@@ -101,7 +101,7 @@ class TestEngine {
       "post" -> tablePost(),
       "comment" -> tableComment()
     )
-    val result = Engine.query(db,
+    val result = query(db,
     "select * from (select * from user where id <= 3)")
     print(result)
   }
