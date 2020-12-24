@@ -10,24 +10,22 @@ object Ast {
 
   trait ProjectExpr extends SqlExpr
 
-  trait BinaryOp extends SqlExpr {
+  trait BinaryOpExpr extends SqlExpr {
     val left: SqlExpr
     val right: SqlExpr
   }
 
-  trait Comparing extends BinaryOp
+  case class Eq(left: SqlExpr, right: SqlExpr) extends BinaryOpExpr
 
-  case class Eq(left: SqlExpr, right: SqlExpr) extends Comparing
+  case class Neq(left: SqlExpr, right: SqlExpr) extends BinaryOpExpr
 
-  case class Neq(left: SqlExpr, right: SqlExpr) extends Comparing
+  case class Less(left: SqlExpr, right: SqlExpr) extends BinaryOpExpr
 
-  case class Less(left: SqlExpr, right: SqlExpr) extends Comparing
+  case class Greater(left: SqlExpr, right: SqlExpr) extends BinaryOpExpr
 
-  case class Greater(left: SqlExpr, right: SqlExpr) extends Comparing
+  case class LessOrEqual(left: SqlExpr, right: SqlExpr) extends BinaryOpExpr
 
-  case class LessOrEqual(left: SqlExpr, right: SqlExpr) extends Comparing
-
-  case class GreaterOrEqual(left: SqlExpr, right: SqlExpr) extends Comparing
+  case class GreaterOrEqual(left: SqlExpr, right: SqlExpr) extends BinaryOpExpr
 
   case class Or(left: SqlExpr, right: SqlExpr) extends SqlExpr
 
@@ -69,9 +67,9 @@ object Ast {
 
   case class TableRelation(name: String, alias: Option[String]) extends Relation
 
-  case class TableWithJoin(table: TableRelation, joins: Seq[JoinRelation]) extends Relation
+  case class TableWithJoin(tableRel: TableRelation, joins: Seq[JoinRelation]) extends Relation
 
-  case class JoinRelation(table: TableRelation, condition: Option[SqlExpr])
+  case class JoinRelation(tableRel: TableRelation, condition: Option[SqlExpr])
 
   case class Projection(expr: ProjectExpr, alias: Option[String]) extends Node
 

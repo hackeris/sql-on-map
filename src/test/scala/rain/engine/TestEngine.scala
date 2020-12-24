@@ -1,7 +1,7 @@
 package rain.engine
 
 import org.junit.Test
-import rainm.engine.Engine.query
+import rainm.engine.Engine._
 import rainm.engine.Value._
 
 class TestEngine {
@@ -40,7 +40,7 @@ class TestEngine {
     Seq(row1, row2, row3)
   }
 
-  def getDb: DataBase = Map(
+  def testDataBase: DataBase = Map(
     "user" -> userTable(),
     "post" -> postTable(),
     "comment" -> commentTable()
@@ -52,8 +52,8 @@ class TestEngine {
     val table = table1()
 
     def exec(table: Table, sql: String): Table = {
-      val db: DataBase = Map("table" -> table)
-      query(db, sql)
+      val database: DataBase = Map("table" -> table)
+      query(database, sql)
     }
 
     var result = exec(table, "select b, a from table")
@@ -72,23 +72,31 @@ class TestEngine {
   @Test
   def joinTest(): Unit = {
 
-    val db: DataBase = getDb
+    val database: DataBase = testDataBase
 
-    var result = query(db, "select * from user")
+    var result = query(database, "select * from user")
     print(result)
 
-    result = query(db, "select u.id, u.name, p.title " +
+    result = query(database, "select u.id, u.name, p.title " +
       "from user as u join post as p on u.id = p.user_id")
     print(result)
 
-    result = query(db,
+    result = query(database,
       "select u.id, u.name, p.title " +
         "from user as u join post as p on u.id = p.user_id " +
         "where u.id <= 3")
     print(result)
 
-    result = query(db,
+    result = query(database,
       "select u.id, p.id, c.id, u.name, p.title, c.content " +
+        "from user as u " +
+        "join post as p on u.id = p.user_id " +
+        "join comment as c on c.post_id = p.id " +
+        "where u.id <= 3")
+    print(result)
+
+    result = query(database,
+      "select * " +
         "from user as u " +
         "join post as p on u.id = p.user_id " +
         "join comment as c on c.post_id = p.id " +
@@ -99,9 +107,9 @@ class TestEngine {
   @Test
   def selectOnSelectTest(): Unit = {
 
-    val db: DataBase = getDb
+    val database: DataBase = testDataBase
 
-    val result = query(db, "select * from (select * from user where id <= 3)")
+    val result = query(database, "select * from (select * from user where id <= 3)")
     print(result)
   }
 

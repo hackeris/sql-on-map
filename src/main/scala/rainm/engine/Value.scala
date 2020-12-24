@@ -5,10 +5,6 @@ import scala.annotation.tailrec
 
 object Value {
 
-  type Row = Map[String, Value[_]]
-  type Table = Seq[Row]
-  type DataBase = Map[String, Table]
-
   sealed trait Value[T] {
     def value: T
 

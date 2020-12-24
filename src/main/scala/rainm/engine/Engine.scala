@@ -5,37 +5,48 @@ import rainm.engine.Value._
 
 object Engine {
 
-  def query(db: DataBase, sql: String): Table = {
+  type Row = Map[String, Value[_]]
+  type Table = Seq[Row]
+
+  trait DataBase {
+    def table(name: String): Table
+  }
+
+  implicit class MapAsDataBase(map: Map[String, Table]) extends DataBase {
+    override def table(name: String): Table = map(name)
+  }
+
+  def query(database: DataBase, sql: String): Table = {
     val ast = Parser.parse(sql)
     ast match {
       case Some(r: SelectStmt) =>
-        execute(db, r)
+        execute(database, r)
       case _ =>
         throw new RuntimeException("Illegal ast")
     }
   }
 
-  def execute(db: DataBase, sql: SelectStmt): Table = {
+  def execute(database: DataBase, sql: SelectStmt): Table = {
     sql match {
       case SelectStmt(s, f, w, g, o, l) =>
-        db.from(f)
+        database.from(f)
           .where(w)
           .group(g)
-          .aggre(s)
+          .agg(s)
           .select(s)
           .orderBy(o)
           .limit(l)
     }
   }
 
-  implicit class DataBaseOp(db: DataBase) {
+  implicit class DataBaseOp(database: DataBase) {
     def from(relation: Relation): Table = relation match {
       case rel: TableRelation =>
         selectAll(rel)
       case TableWithJoin(table, joins) =>
         joinWith(selectAll(table), joins)
       case sql: SelectStmt =>
-        execute(db, sql)
+        execute(database, sql)
     }
 
     def applyAlias(table: Table, alias: String): Table =
@@ -54,7 +65,7 @@ object Engine {
     }
 
     def joinWithSingle(table: Table, join: JoinRelation): Table = {
-      val right = selectAll(join.table)
+      val right = selectAll(join.tableRel)
       val joined = table.flatMap(row => right.map(rightRow => row ++ rightRow))
       join.condition match {
         case Some(expr) =>
@@ -65,8 +76,8 @@ object Engine {
     }
 
     def selectAll(rel: TableRelation): Table = (rel.name, rel.alias) match {
-      case (name, None) => db(name)
-      case (name, Some(alias)) => applyAlias(db(name), alias)
+      case (name, None) => database.table(name)
+      case (name, Some(alias)) => applyAlias(database.table(name), alias)
     }
   }
 
@@ -111,7 +122,7 @@ object Engine {
       tables.map(evalProjections(_, projections))
         .reduce(_ ++ _)
 
-    def aggre(projections: Seq[Projection]): Seq[Table] =
+    def agg(projections: Seq[Projection]): Seq[Table] =
       if (projections.exists(isAgg)) {
         tables.map(evalAggregateProjections(_, projections))
       } else {
@@ -142,41 +153,34 @@ object Engine {
     input.map(evalProjectionsOnRow(_, expr))
 
   def evalProjectionsOnRow(row: Row, projections: Seq[Projection]): Row = {
-    val pros = projections.map(proj => row.collect(projector(proj)))
+    val pros = projections.map(proj => projector(proj)(row))
     pros.reduce(_ ++ _)
   }
 
-  def projector(proj: Projection): PartialFunction[(String, Value[_]), (String, Value[_])] =
+  def projector(proj: Projection): Row => Row =
     (proj.expr, proj.alias) match {
-      case (StarProj(), _) => {
-        case (_1, _2) => (_1, _2)
+      case (StarProj(), _) =>
+        row => row
+      case (f: Field, alias) => alias match {
+        case None =>
+          row => Map(f.key -> row(f.key))
+        case Some(alias: String) =>
+          row => Map(alias -> row(f.key))
       }
-      case (f: Field, alias) =>
-        alias match {
-          case None => {
-            case (f.key, _2) => (f.key, _2)
-          }
-          case Some(alias: String) => {
-            case (f.key, _2) => (alias, _2)
-          }
-        }
       case (l: Literal, alias) => alias match {
-        case None => {
-          case (_1, _2) => (l.value.toString, l.value)
-        }
-        case Some(alias: String) => {
-          case (_1, _2) => (alias, l.value)
-        }
+        case None =>
+          _ => Map(l.value.toString -> l.value)
+        case Some(alias: String) =>
+          _ => Map(alias -> l.value)
       }
-      case (l: SqlAgg, alias) => {
-        case (_1, _2) => (_1, _2)
-      }
+      case (_: SqlAgg, _) =>
+        row => row
       case _ =>
-        throw new RuntimeException("Illegal projection")
+        throw new RuntimeException("Unsupported projection")
     }
 
   def evalWhereOnRow(row: Row, expr: SqlExpr): Boolean = {
-    def evalBinaryOp(r: Row, expr: BinaryOp, f: (Value[_], Value[_]) => Boolean): Boolean = {
+    def evalBinaryOp(r: Row, expr: BinaryOpExpr, f: (Value[_], Value[_]) => Boolean): Boolean = {
       (expr.left, expr.right) match {
         case (left: Literal, right: Literal) => f(left.value, right.value)
         case (left: Literal, right: Field) => f(left.value, right.of(r))
